@@ -502,7 +502,7 @@ const openPosition = (type) => {
   if (position.value || currentIndex.value === 0) return;
 
   if (balance.value <= 0) {
-    alert('白癡 沒錢了拉！');
+    alert('白癡 沒錢了拉！案F5刷新畫面重新給你錢');
     return;
   }
   
