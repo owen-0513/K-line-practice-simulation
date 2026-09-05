@@ -162,7 +162,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted ,watch} from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { createChart, CandlestickSeries, CrosshairMode } from 'lightweight-charts';
 import axios from 'axios';
 
@@ -172,12 +172,6 @@ const overlayCanvas = ref(null);
 
 const showFlippedModal = ref(false);
 const initialBalance = 10000; // 初始本金
-
-watch(balance, (newVal) => {
-  if (newVal >= initialBalance * 2) {
-    showFlippedModal.value = true;
-  }
-});
 
 let chart = null;
 let candleSeries = null;
@@ -192,13 +186,20 @@ const currentSymbol = ref('BTCUSDT');
 const currentInterval = ref('1h');
 const isLoading = ref(false);
 
-// 模擬下單狀態、保證金、槓桿、止盈與停損
+// 模擬下單狀態、保證金、槓桿、止盈與停損放在這裡（確保在 watch 之前定義）
 const balance = ref(10000);
 const inputMargin = ref(1000); 
 const inputTakeProfit = ref(null);
 const inputStopLoss = ref(null);
 const selectedLeverage = ref(10);
 const position = ref(null);
+
+// 監聽 balance 必須放在 balance 宣告的「後面」
+watch(balance, (newVal) => {
+  if (newVal >= initialBalance * 2) {
+    showFlippedModal.value = true;
+  }
+});
 
 // 測驗與勝率統計狀態
 const isQuizMode = ref(false);
@@ -256,7 +257,6 @@ onMounted(async () => {
     layout: { background: { color: '#161a25' }, textColor: '#d1d4dc' },
     grid: { vertLines: { color: '#2B2B43' }, horzLines: { color: '#2B2B43' } },
     timeScale: { borderColor: '#2B2B43', timeVisible: true, rightOffset: 12 },
-    // 設定十字線為 Normal 模式，讓它跟隨滑鼠自由移動而不吸附 K 棒
     crosshair: {
       mode: CrosshairMode.Normal,
       vertLine: {
@@ -311,6 +311,18 @@ onMounted(async () => {
       }
     }
   });
+});
+
+onUnmounted(() => {
+  isUnmounted = true;
+  if (resizeObserver && chartWrapper.value) {
+    resizeObserver.unobserve(chartWrapper.value);
+  }
+  if (timer) clearInterval(timer);
+  if (rafId) cancelAnimationFrame(rafId);
+  if (chart) {
+    chart.remove();
+  }
 });
 
 const fetchKlines = async (targetStartTime = null, targetEndTime = null) => {
@@ -408,10 +420,9 @@ const changeInterval = async () => {
       url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
     } else if (maxTime) {
       const endTime = maxTime;
-      // 👉 修正重點：根據不同週期給予足夠的時間跨度（例如日線給 1000 天，小週期給對應的毫秒數）
       const spanMs = currentInterval.value === '1d' 
-        ? 1000 * 24 * 60 * 60 * 1000  // 日線抓 1000 天
-        : 1000 * intervalMs;           // 其他小週期抓 1000 根
+        ? 1000 * 24 * 60 * 60 * 1000  
+        : 1000 * intervalMs;         
 
       const startTime = Math.max(0, endTime - spanMs);
       url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
@@ -475,7 +486,6 @@ const checkRiskTriggers = () => {
   const currentCandle = allData.value[currentIndex.value - 1];
   if (!currentCandle) return;
 
-  // 計算當前未實現損益並檢查是否爆倉
   const priceDiff = position.value.type === 'LONG' 
     ? currentPrice.value - position.value.entryPrice 
     : position.value.entryPrice - currentPrice.value;
@@ -488,7 +498,7 @@ const checkRiskTriggers = () => {
       quizStats.value.losses++;
       isQuizMode.value = false;
     }
-    alert('💥 靠北喔傻屌 玩到爆倉你他媽要死是嗎 請倉位管理');
+    alert('💥 爆倉！請注意倉位管理');
     position.value = null;
     if (isPlaying.value) togglePlay();
     return;
@@ -543,7 +553,7 @@ const openPosition = (type) => {
   if (position.value || currentIndex.value === 0) return;
 
   if (balance.value <= 0) {
-    alert('白癡 沒錢了拉！案F5刷新畫面重新給你錢');
+    alert('餘額不足！請重新整理畫面');
     return;
   }
   
@@ -1185,17 +1195,6 @@ const resetReplay = () => {
   renderChart();
   if (chart) chart.timeScale().fitContent();
 };
-
-onUnmounted(() => {
-  isUnmounted = true;
-  if (resizeObserver) resizeObserver.disconnect();
-  if (timer) clearInterval(timer);
-  if (rafId) cancelAnimationFrame(rafId);
-  if (chart) {
-    chart.remove();
-    chart = null;
-  }
-});
 </script>
 
 <style>
