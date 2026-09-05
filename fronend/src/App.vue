@@ -360,23 +360,18 @@ const changeInterval = async () => {
   if (isPlaying.value) togglePlay();
 
   let targetTime = null;
-  let quizStartTime = null;
-  let quizEndTime = null;
 
   if (isQuizMode.value && allData.value.length > 0) {
     const currentCandle = allData.value[currentIndex.value - 1] || allData.value[0];
     targetTime = currentCandle.time;
-    quizStartTime = Math.floor(allData.value[0].time * 1000);
-    quizEndTime = Math.floor(allData.value[allData.value.length - 1].time * 1000);
   } else {
     const currentCandle = allData.value[currentIndex.value - 1];
     targetTime = currentCandle ? currentCandle.time : null;
   }
 
-  let minTime = targetTime ? Math.floor(targetTime * 1000) : null;
-  let maxTime = minTime;
+  let maxTime = null;
 
-  // 如果畫面上有畫線，才去掃描畫線邊界；若沒有畫線，不要用 maxTime 限制 K 棒長度
+  // 如果畫面上有畫線，才去掃描畫線邊界
   if (!isQuizMode.value && drawings.value.length > 0) {
     drawings.value.forEach(item => {
       let t1 = null, t2 = null;
@@ -400,30 +395,27 @@ const changeInterval = async () => {
 
       if (t1) {
         const ms1 = Math.floor(t1 * 1000);
-        if (!minTime || ms1 < minTime) minTime = ms1;
         if (!maxTime || ms1 > maxTime) maxTime = ms1;
       }
       if (t2) {
         const ms2 = Math.floor(t2 * 1000);
-        if (!minTime || ms2 < minTime) minTime = ms2;
         if (!maxTime || ms2 > maxTime) maxTime = ms2;
       }
     });
-  } else {
-    // 沒有畫線的情況下，直接設為 null，讓 Binance API 預設回傳足夠的 K 線數量（預設 1000 根）
-    maxTime = null;
   }
 
   try {
     const intervalMs = getIntervalMs(currentInterval.value);
     let url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&limit=1000`;
 
-    if (isQuizMode.value && quizStartTime && quizEndTime) {
-      const startTime = Math.max(0, quizStartTime);
-      const endTime = quizEndTime + (200 * intervalMs);
+    if (isQuizMode.value && targetTime) {
+      // 測驗模式下：以目前測驗停下的時間點（targetTime）往前推 500 根 K 棒，確保不管切到多大的週期都有足夠的歷史 K 棒可以測驗
+      const endTime = Math.floor(targetTime * 1000);
+      const spanMs = 500 * intervalMs;
+      const startTime = Math.max(0, endTime - spanMs);
       url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
     } else if (maxTime) {
-      // 只有在有畫線且需要對齊畫線時才限制區間
+      // 有畫線的情況
       const endTime = maxTime;
       const spanMs = 500 * intervalMs; 
       const startTime = Math.max(0, endTime - spanMs);
@@ -455,6 +447,7 @@ const changeInterval = async () => {
           closestIndex = index;
         }
       });
+      // 測驗模式下，把 currentIndex 設在對應的時間點，並保留前面的 K 棒供回測觀察
       currentIndex.value = Math.min(newData.length, Math.max(1, closestIndex + 1));
     } else {
       currentIndex.value = newData.length;
