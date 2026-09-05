@@ -948,9 +948,11 @@ const renderItem = (ctx, item, isSelected = false, isTemp = false) => {
     const diff = high - low;
     const levels = [
       { ratio: 0, color: '#787b86' },
+      { ratio: 0.236, color: '#f23645' },
       { ratio: 0.382, color: '#ff9800' },
       { ratio: 0.5, color: '#4caf50' },
       { ratio: 0.618, color: '#089981' },
+      { ratio: 0.786, color: '#ab47bc' },
       { ratio: 1, color: '#787b86' }
     ];
 
