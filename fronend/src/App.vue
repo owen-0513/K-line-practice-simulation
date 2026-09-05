@@ -153,8 +153,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { createChart, CandlestickSeries } from 'lightweight-charts';
-// import { createChart } from 'lightweight-charts';
+import { createChart, CandlestickSeries, CrosshairMode } from 'lightweight-charts';
 import axios from 'axios';
 
 const chartContainer = ref(null);
@@ -238,6 +237,22 @@ onMounted(async () => {
     layout: { background: { color: '#161a25' }, textColor: '#d1d4dc' },
     grid: { vertLines: { color: '#2B2B43' }, horzLines: { color: '#2B2B43' } },
     timeScale: { borderColor: '#2B2B43', timeVisible: true, rightOffset: 12 },
+    // 設定十字線為 Normal 模式，讓它跟隨滑鼠自由移動而不吸附 K 棒
+    crosshair: {
+      mode: CrosshairMode.Normal,
+      vertLine: {
+        color: '#758696',
+        width: 1,
+        style: 3,
+        labelBackgroundColor: '#2962ff',
+      },
+      horzLine: {
+        color: '#758696',
+        width: 1,
+        style: 3,
+        labelBackgroundColor: '#2962ff',
+      },
+    },
   });
 
   candleSeries = chart.addSeries(CandlestickSeries, {
@@ -331,7 +346,6 @@ const changeInterval = async () => {
       t1 = item.startTime;
       t2 = item.endTime;
     } else if (item.type === 'pen' && item.points) {
-      // 筆刷若記錄了 time 也可以相容，純像素則略過
       item.points.forEach(p => {
         if (p.time) {
           if (!t1 || p.time < t1) t1 = p.time;
@@ -631,7 +645,6 @@ const getTimeFromCoordinate = (x) => {
   return time;
 };
 
-// 修改後的滑鼠按下：針對 pen 改為純像素紀錄，不再吸附 K 棒
 const handleMouseDown = (e) => {
   if (!chartWrapper.value || !chart || !candleSeries) return;
   const rect = chartWrapper.value.getBoundingClientRect();
@@ -684,7 +697,6 @@ const handleMouseDown = (e) => {
   }
 };
 
-// 修改後的滑鼠移動：針對 pen 動態加入純像素點
 const handleMouseMove = (e) => {
   if (!isDragging || !chartWrapper.value || !chart || !candleSeries) return;
   
@@ -1022,7 +1034,6 @@ const renderItem = (ctx, item, isSelected = false, isTemp = false) => {
     if (!item.points || item.points.length === 0) return;
     ctx.beginPath();
     item.points.forEach((p, idx) => {
-      // 筆刷直接使用純像素坐標 p.x 與 p.y
       const px = p.x;
       const py = p.y;
       if (idx === 0) ctx.moveTo(px, py);
