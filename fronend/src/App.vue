@@ -328,140 +328,70 @@ const changeSymbol = async () => {
 const changeInterval = async () => {
   if (isPlaying.value) togglePlay();
 
-  const currentCandle = allData.value[currentIndex.value - 1];
-  let targetTime = currentCandle ? currentCandle.time : null;
+  // 1. 如果目前在「測驗模式」，保留當前測驗的時間邊界；否則取得目前畫面的目標時間點
+  let targetTime = null;
+  let quizStartTime = null;
+  let quizEndTime = null;
 
-  let minTime = targetTime ? Math.floor(targetTime * 1000) : null;
-  let maxTime = minTime;
-
-  drawings.value.forEach(item => {
-    let t1 = null, t2 = null;
-    if (item.type === 'trend' || item.type === 'rect') {
-      t1 = item.time1;
-      t2 = item.time2;
-    } else if (item.type === 'fib') {
-      t1 = item.time1;
-      t2 = item.time2;
-    } else if (item.type === 'vp') {
-      t1 = item.startTime;
-      t2 = item.endTime;
-    } else if (item.type === 'pen' && item.points) {
-      item.points.forEach(p => {
-        if (p.time) {
-          if (!t1 || p.time < t1) t1 = p.time;
-          if (!t2 || p.time > t2) t2 = p.time;
-        }
-      });
-    }
-
-    if (t1) {
-      const ms1 = Math.floor(t1 * 1000);
-      if (!minTime || ms1 < minTime) minTime = ms1;
-      if (!maxTime || ms1 > maxTime) maxTime = ms1;
-    }
-    if (t2) {
-      const ms2 = Math.floor(t2 * 1000);
-      if (!minTime || ms2 < minTime) minTime = ms2;
-      if (!maxTime || ms2 > maxTime) maxTime = ms2;
-    }
-  });
-
-  try {
-    let url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&limit=1000`;
-
-    if (minTime && maxTime) {
-      const intervalMs = getIntervalMs(currentInterval.value);
-      const startTime = Math.max(0, minTime - (100 * intervalMs));
-      const endTime = maxTime + (100 * intervalMs);
-      url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
-    }
-
-    const res = await axios.get(url);
-    if (isUnmounted) return;
-    if (!res.data || res.data.length === 0) return;
-
-    const newData = res.data.map(item => ({
-      time: item[0] / 1000,
-      open: Number(item[1]),
-      high: Number(item[2]),
-      low: Number(item[3]),
-      close: Number(item[4]),
-      volume: Number(item[5]),
-    }));
-
-    allData.value = newData;
-
-    if (targetTime) {
-      let closestIndex = 0;
-      let minDiff = Infinity;
-      newData.forEach((item, index) => {
-        const diff = Math.abs(item.time - targetTime);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestIndex = index;
-        }
-      });
-      currentIndex.value = Math.min(newData.length, closestIndex + 1);
-    } else {
-      currentIndex.value = newData.length;
-    }
-
-    renderChart();
-
-    if (chart && !minTime) {
-      chart.timeScale().fitContent();
-    }
-  } catch (error) {
-    console.error('切換週期失敗:', error);
+  if (isQuizMode.value && allData.value.length > 0) {
+    const currentCandle = allData.value[currentIndex.value - 1] || allData.value[0];
+    targetTime = currentCandle.time;
+    quizStartTime = Math.floor(allData.value[0].time * 1000);
+    quizEndTime = Math.floor(allData.value[allData.value.length - 1].time * 1000);
+  } else {
+    const currentCandle = allData.value[currentIndex.value - 1];
+    targetTime = currentCandle ? currentCandle.time : null;
   }
-const changeInterval = async () => {
-  if (isPlaying.value) togglePlay();
-
-  // 1. 取得目前畫面上的目標時間點（優先看當前 K 棒，其次看畫線定位）
-  const currentCandle = allData.value[currentIndex.value - 1];
-  let targetTime = currentCandle ? currentCandle.time : null;
 
   let minTime = targetTime ? Math.floor(targetTime * 1000) : null;
   let maxTime = minTime;
 
-  drawings.value.forEach(item => {
-    let t1 = null, t2 = null;
-    if (item.type === 'trend' || item.type === 'rect') {
-      t1 = item.time1;
-      t2 = item.time2;
-    } else if (item.type === 'fib') {
-      t1 = item.time1;
-      t2 = item.time2;
-    } else if (item.type === 'vp') {
-      t1 = item.startTime;
-      t2 = item.endTime;
-    } else if (item.type === 'pen' && item.points) {
-      item.points.forEach(p => {
-        if (p.time) {
-          if (!t1 || p.time < t1) t1 = p.time;
-          if (!t2 || p.time > t2) t2 = p.time;
-        }
-      });
-    }
+  // 收集畫線的時間範圍（僅一般模式）
+  if (!isQuizMode.value) {
+    drawings.value.forEach(item => {
+      let t1 = null, t2 = null;
+      if (item.type === 'trend' || item.type === 'rect') {
+        t1 = item.time1;
+        t2 = item.time2;
+      } else if (item.type === 'fib') {
+        t1 = item.time1;
+        t2 = item.time2;
+      } else if (item.type === 'vp') {
+        t1 = item.startTime;
+        t2 = item.endTime;
+      } else if (item.type === 'pen' && item.points) {
+        item.points.forEach(p => {
+          if (p.time) {
+            if (!t1 || p.time < t1) t1 = p.time;
+            if (!t2 || p.time > t2) t2 = p.time;
+          }
+        });
+      }
 
-    if (t1) {
-      const ms1 = Math.floor(t1 * 1000);
-      if (!minTime || ms1 < minTime) minTime = ms1;
-      if (!maxTime || ms1 > maxTime) maxTime = ms1;
-    }
-    if (t2) {
-      const ms2 = Math.floor(t2 * 1000);
-      if (!minTime || ms2 < minTime) minTime = ms2;
-      if (!maxTime || ms2 > maxTime) maxTime = ms2;
-    }
-  });
+      if (t1) {
+        const ms1 = Math.floor(t1 * 1000);
+        if (!minTime || ms1 < minTime) minTime = ms1;
+        if (!maxTime || ms1 > maxTime) maxTime = ms1;
+      }
+      if (t2) {
+        const ms2 = Math.floor(t2 * 1000);
+        if (!minTime || ms2 < minTime) minTime = ms2;
+        if (!maxTime || ms2 > maxTime) maxTime = ms2;
+      }
+    });
+  }
 
   try {
     const intervalMs = getIntervalMs(currentInterval.value);
     let url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&limit=1000`;
 
-    // 2. 如果有抓到目標時間點或畫線範圍，以該區間的結束點往前推 1000 根，確保有足夠的 K 棒數量
-    if (maxTime) {
+    if (isQuizMode.value && quizStartTime && quizEndTime) {
+      // 2. 測驗模式：維持原本測驗的區間去要新週期的 K 棒
+      const startTime = Math.max(0, quizStartTime);
+      const endTime = quizEndTime + (200 * intervalMs);
+      url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
+    } else if (maxTime) {
+      // 3. 一般模式：以結束點往前推 1000 根，確保有足夠的 K 棒數量
       const endTime = maxTime;
       const startTime = Math.max(0, endTime - (1000 * intervalMs));
       url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
@@ -482,7 +412,6 @@ const changeInterval = async () => {
 
     allData.value = newData;
 
-    // 3. 嘗試把畫面定位回原本的目標時間點
     if (targetTime) {
       let closestIndex = 0;
       let minDiff = Infinity;
@@ -493,14 +422,14 @@ const changeInterval = async () => {
           closestIndex = index;
         }
       });
-      currentIndex.value = Math.min(newData.length, closestIndex + 1);
+      currentIndex.value = Math.min(newData.length, Math.max(1, closestIndex + 1));
     } else {
       currentIndex.value = newData.length;
     }
 
     renderChart();
 
-    if (chart && !maxTime) {
+    if (chart && !maxTime && !isQuizMode.value) {
       chart.timeScale().fitContent();
     }
   } catch (error) {
@@ -789,8 +718,8 @@ const handleMouseDown = (e) => {
       if (price && time) {
         tempDrawing = {
           type: 'trend',
-          time1: time, price1: price, x1: x, y1: y,
-          time2: time, price2: price, x2: x, y2: y,
+          time1: time, price1: price,
+          time2: time, price2: price,
         };
       }
     } else if (drawMode.value === 'fib') {
@@ -837,8 +766,8 @@ const handleMouseMove = (e) => {
       if (currentPriceVal && currentTime) {
         tempDrawing = {
           type: 'trend',
-          time1: dragStart.time, price1: dragStart.price, x1: dragStart.x, y1: dragStart.y,
-          time2: currentTime, price2: currentPriceVal, x2: currentX, y2: currentY,
+          time1: dragStart.time, price1: dragStart.price,
+          time2: currentTime, price2: currentPriceVal,
         };
       }
     } else if (drawMode.value === 'fib') {
@@ -930,18 +859,15 @@ const checkSelection = (clickX, clickY) => {
   for (let i = drawings.value.length - 1; i >= 0; i--) {
     const item = drawings.value[i];
     if (item.type === 'trend') {
-      let x1 = chart.timeScale().timeToCoordinate(item.time1);
-      let y1 = candleSeries.priceToCoordinate(item.price1);
-      let x2 = chart.timeScale().timeToCoordinate(item.time2);
-      let y2 = candleSeries.priceToCoordinate(item.price2);
-      if (x1 === null) x1 = item.x1 ?? 0;
-      if (y1 === null) y1 = item.y1 ?? 0;
-      if (x2 === null) x2 = item.x2 ?? 0;
-      if (y2 === null) y2 = item.y2 ?? 0;
-
-      if (distToSegment({ x: clickX, y: clickY }, { x: x1, y: y1 }, { x: x2, y: y2 }) < 8) {
-        foundId = item.id;
-        break;
+      const x1 = chart.timeScale().timeToCoordinate(item.time1);
+      const y1 = candleSeries.priceToCoordinate(item.price1);
+      const x2 = chart.timeScale().timeToCoordinate(item.time2);
+      const y2 = candleSeries.priceToCoordinate(item.price2);
+      if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+        if (distToSegment({ x: clickX, y: clickY }, { x: x1, y: y1 }, { x: x2, y: y2 }) < 8) {
+          foundId = item.id;
+          break;
+        }
       }
     } else if (item.type === 'fib') {
       const y1 = candleSeries.priceToCoordinate(item.price1);
@@ -1079,15 +1005,11 @@ const redrawCanvas = () => {
 const renderItem = (ctx, item, isSelected = false, isTemp = false) => {
   if (!chart || !candleSeries) return;
   if (item.type === 'trend') {
-    let x1 = chart.timeScale().timeToCoordinate(item.time1);
-    let y1 = candleSeries.priceToCoordinate(item.price1);
-    let x2 = chart.timeScale().timeToCoordinate(item.time2);
-    let y2 = candleSeries.priceToCoordinate(item.price2);
-
-    if (x1 === null) x1 = item.x1 ?? 0;
-    if (y1 === null) y1 = item.y1 ?? 0;
-    if (x2 === null) x2 = item.x2 ?? 0;
-    if (y2 === null) y2 = item.y2 ?? 0;
+    const x1 = chart.timeScale().timeToCoordinate(item.time1);
+    const y1 = candleSeries.priceToCoordinate(item.price1);
+    const x2 = chart.timeScale().timeToCoordinate(item.time2);
+    const y2 = candleSeries.priceToCoordinate(item.price2);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) return;
 
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -1252,10 +1174,9 @@ onUnmounted(() => {
   if (chart) {
     chart.remove();
     chart = null;
-    }
+  }
 });
 </script>
-
 <style>
 html, body, #app {
   width: 100%; height: 100%; margin: 0; padding: 0;
