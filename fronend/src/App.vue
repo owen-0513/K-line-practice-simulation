@@ -154,6 +154,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { createChart, CandlestickSeries } from 'lightweight-charts';
+// import { createChart } from 'lightweight-charts';
 import axios from 'axios';
 
 const chartContainer = ref(null);
