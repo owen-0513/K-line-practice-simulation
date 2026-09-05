@@ -371,7 +371,6 @@ const changeInterval = async () => {
 
   let maxTime = null;
 
-  // 如果畫面上有畫線，才去掃描畫線邊界
   if (!isQuizMode.value && drawings.value.length > 0) {
     drawings.value.forEach(item => {
       let t1 = null, t2 = null;
@@ -409,13 +408,11 @@ const changeInterval = async () => {
     let url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&limit=1000`;
 
     if (isQuizMode.value && targetTime) {
-      // 測驗模式下：以目前測驗停下的時間點（targetTime）往前推 500 根 K 棒，確保不管切到多大的週期都有足夠的歷史 K 棒可以測驗
       const endTime = Math.floor(targetTime * 1000);
       const spanMs = 500 * intervalMs;
       const startTime = Math.max(0, endTime - spanMs);
       url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
     } else if (maxTime) {
-      // 有畫線的情況
       const endTime = maxTime;
       const spanMs = 500 * intervalMs; 
       const startTime = Math.max(0, endTime - spanMs);
@@ -447,7 +444,6 @@ const changeInterval = async () => {
           closestIndex = index;
         }
       });
-      // 測驗模式下，把 currentIndex 設在對應的時間點，並保留前面的 K 棒供回測觀察
       currentIndex.value = Math.min(newData.length, Math.max(1, closestIndex + 1));
     } else {
       currentIndex.value = newData.length;
@@ -476,6 +472,7 @@ const getIntervalMs = (interval) => {
   return map[interval] || 60 * 60 * 1000;
 };
 
+// 修正後的檢查機制：當 K 棒跑動碰到止盈或止損時，立即跳窗通知並結算
 const checkRiskTriggers = () => {
   if (!position.value) return;
   const currentCandle = allData.value[currentIndex.value - 1];
@@ -493,7 +490,7 @@ const checkRiskTriggers = () => {
       quizStats.value.losses++;
       isQuizMode.value = false;
     }
-    alert('💥 搞屁爆倉了！請注意倉位管理');
+    alert('💥 爆倉！已強制平倉。');
     position.value = null;
     if (isPlaying.value) togglePlay();
     return;
@@ -537,8 +534,11 @@ const checkRiskTriggers = () => {
       isQuizMode.value = false;
     }
 
-    const msg = triggeredType === 'TP' ? '🎯 觸發止盈！' : '⚠️ 觸發止損！';
-    alert(`${msg} 已自動平倉，損益: ${pnl.toFixed(2)} USDT`);
+    const title = triggeredType === 'TP' ? '🎯 【恭喜】觸發止盈！' : '🛑 【注意】觸發停損！';
+    const profitText = pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2);
+    
+    alert(`${title}\n------------------\n成交價: ${triggerPrice}\n本單損益: ${profitText} USDT\n目前總資金: ${balance.value.toFixed(2)} USDT`);
+    
     position.value = null;
     if (isPlaying.value) togglePlay();
   }
@@ -548,7 +548,7 @@ const openPosition = (type) => {
   if (position.value || currentIndex.value === 0) return;
 
   if (balance.value <= 0) {
-    alert('白癡你沒錢了！請按F5重新整理畫面');
+    alert('你沒錢了！請重新整理畫面');
     return;
   }
   
@@ -596,10 +596,15 @@ const closePosition = () => {
   redrawCanvas();
 };
 
+// 修正後的隨機出題：強制清空上一題殘留的持倉與止盈停損設定
 const startQuizMode = async () => {
   if (isPlaying.value) togglePlay();
   clearAllDrawings();
-  if (position.value) closePosition();
+  
+  position.value = null;
+  inputTakeProfit.value = null;
+  inputStopLoss.value = null;
+
   isLoading.value = true;
 
   try {
