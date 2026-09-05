@@ -447,7 +447,7 @@ const checkRiskTriggers = () => {
       quizStats.value.losses++;
       isQuizMode.value = false;
     }
-    alert('💥 發生爆倉！您的保證金已全部虧光，強制平倉。');
+    alert('💥 靠北喔傻屌 玩到爆倉你他媽要死是嗎 請倉位管理');
     position.value = null;
     if (isPlaying.value) togglePlay();
     return;
@@ -502,7 +502,7 @@ const openPosition = (type) => {
   if (position.value || currentIndex.value === 0) return;
 
   if (balance.value <= 0) {
-    alert('您的帳戶餘額不足（已破產），無法開倉！');
+    alert('白癡 沒錢了拉！');
     return;
   }
   
@@ -512,7 +512,7 @@ const openPosition = (type) => {
     return;
   }
   if (balance.value < marginToUse) {
-    alert('餘額不足，無法投入指定金額！');
+    alert('你沒那麼多錢！');
     return;
   }
 
