@@ -434,6 +434,25 @@ const checkRiskTriggers = () => {
   const currentCandle = allData.value[currentIndex.value - 1];
   if (!currentCandle) return;
 
+  // 計算當前未實現損益並檢查是否爆倉
+  const priceDiff = position.value.type === 'LONG' 
+    ? currentPrice.value - position.value.entryPrice 
+    : position.value.entryPrice - currentPrice.value;
+  const currentPnL = (priceDiff / position.value.entryPrice) * position.value.margin * position.value.leverage;
+
+  if (balance.value + currentPnL <= 0) {
+    balance.value = 0;
+    if (isQuizMode.value) {
+      quizStats.value.total++;
+      quizStats.value.losses++;
+      isQuizMode.value = false;
+    }
+    alert('💥 發生爆倉！您的保證金已全部虧光，強制平倉。');
+    position.value = null;
+    if (isPlaying.value) togglePlay();
+    return;
+  }
+
   let triggeredType = null;
   let triggerPrice = 0;
 
@@ -481,6 +500,11 @@ const checkRiskTriggers = () => {
 
 const openPosition = (type) => {
   if (position.value || currentIndex.value === 0) return;
+
+  if (balance.value <= 0) {
+    alert('您的帳戶餘額不足（已破產），無法開倉！');
+    return;
+  }
   
   const marginToUse = Number(inputMargin.value);
   if (!marginToUse || marginToUse <= 0) {
