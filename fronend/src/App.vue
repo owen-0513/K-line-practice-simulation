@@ -153,10 +153,10 @@
   <!-- 3D 翻倉慶祝彈窗 -->
   <div v-if="showFlippedModal" class="modal-3d-overlay">
     <div class="card-3d">
-      <h2>🚀 幹！太神啦！成功翻倉！</h2>
-      <p>資產直接翻倍，這就是少年股神？</p>
+      <h2>🚀 幹！太神啦！成功翻倉！去實盤看看吧</h2>
+      <p>資產已經翻倍</p>
       <div class="trophy-3d">🏆</div>
-      <button @click="showFlippedModal = false">繼續虐盤</button>
+      <button @click="showFlippedModal = false">去實盤看看吧</button>
     </div>
   </div>
 </template>
@@ -493,7 +493,7 @@ const checkRiskTriggers = () => {
       quizStats.value.losses++;
       isQuizMode.value = false;
     }
-    alert('💥 爆倉！請注意倉位管理');
+    alert('💥 搞屁爆倉了！請注意倉位管理');
     position.value = null;
     if (isPlaying.value) togglePlay();
     return;
@@ -537,7 +537,7 @@ const checkRiskTriggers = () => {
       isQuizMode.value = false;
     }
 
-    const msg = triggeredType === 'TP' ? '🎯 觸發止盈！' : '⚠️ 觸發停損！';
+    const msg = triggeredType === 'TP' ? '🎯 觸發止盈！' : '⚠️ 觸發止損！';
     alert(`${msg} 已自動平倉，損益: ${pnl.toFixed(2)} USDT`);
     position.value = null;
     if (isPlaying.value) togglePlay();
@@ -548,7 +548,7 @@ const openPosition = (type) => {
   if (position.value || currentIndex.value === 0) return;
 
   if (balance.value <= 0) {
-    alert('餘額不足！請重新整理畫面');
+    alert('白癡你沒錢了！請按F5重新整理畫面');
     return;
   }
   
