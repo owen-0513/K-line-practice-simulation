@@ -172,6 +172,7 @@ const isPlaying = ref(false);
 const isReplaySelectMode = ref(false);
 const currentSymbol = ref('BTCUSDT');
 const currentInterval = ref('1h');
+const isLoading = ref(false);
 
 // 模擬下單狀態、保證金、槓桿、止盈與停損
 const balance = ref(10000);
