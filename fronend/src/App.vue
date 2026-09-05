@@ -149,16 +149,35 @@
       <canvas ref="overlayCanvas" class="overlay-canvas"></canvas>
     </div>
   </div>
+
+  <!-- 3D 翻倉慶祝彈窗 -->
+  <div v-if="showFlippedModal" class="modal-3d-overlay">
+    <div class="card-3d">
+      <h2>🚀 幹！太神啦！成功翻倉！</h2>
+      <p>資產直接翻倍，這就是少年股神？</p>
+      <div class="trophy-3d">🏆</div>
+      <button @click="showFlippedModal = false">繼續虐盤</button>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted ,watch} from 'vue';
 import { createChart, CandlestickSeries, CrosshairMode } from 'lightweight-charts';
 import axios from 'axios';
 
 const chartContainer = ref(null);
 const chartWrapper = ref(null);
 const overlayCanvas = ref(null);
+
+const showFlippedModal = ref(false);
+const initialBalance = 10000; // 初始本金
+
+watch(balance, (newVal) => {
+  if (newVal >= initialBalance * 2) {
+    showFlippedModal.value = true;
+  }
+});
 
 let chart = null;
 let candleSeries = null;
@@ -1283,5 +1302,54 @@ button.active { background-color: #2962ff; color: #fff; border-color: #2962ff; }
   position: absolute; top: 0; left: 0;
   pointer-events: none;
   z-index: 10;
+}
+
+.modal-3d-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  perspective: 1000px;
+  z-index: 9999;
+}
+
+.card-3d {
+  background: linear-gradient(135deg, #089981, #2962ff);
+  padding: 40px;
+  border-radius: 20px;
+  text-align: center;
+  color: white;
+  transform: rotateX(10deg) rotateY(-10deg);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+  animation: float3d 3s ease-in-out infinite alternate;
+}
+
+.card-3d button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: #fff;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+@keyframes float3d {
+  0% { transform: rotateX(5deg) rotateY(-5deg) translateY(0); }
+  100% { transform: rotateX(-5deg) rotateY(5deg) translateY(-15px); }
+}
+
+.trophy-3d {
+  font-size: 80px;
+  margin: 20px 0;
+  animation: spin3d 4s linear infinite;
+}
+
+@keyframes spin3d {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
 }
 </style>
