@@ -190,7 +190,7 @@ const quizStats = ref({
   losses: 0
 });
 
-// 繪圖模式與物件（全部改以絕對時間 timestamp 與 price 儲存，捨棄 fragile index）
+// 繪圖模式與物件
 const drawMode = ref('none');
 let isDragging = false;
 let dragStart = null;
@@ -310,14 +310,12 @@ const changeSymbol = async () => {
   await fetchKlines();
 };
 
-// 跨週期切換核心：自動涵蓋所有繪圖與目前檢視時間，實現跨週期同步顯示
 const changeInterval = async () => {
   if (isPlaying.value) togglePlay();
 
   const currentCandle = allData.value[currentIndex.value - 1];
   let targetTime = currentCandle ? currentCandle.time : null;
 
-  // 檢查畫面上所有繪圖的最小與最大時間戳記，確保切換到其他週期時不會漏掉歷史圖形
   let minTime = targetTime ? Math.floor(targetTime * 1000) : null;
   let maxTime = minTime;
 
@@ -333,6 +331,7 @@ const changeInterval = async () => {
       t1 = item.startTime;
       t2 = item.endTime;
     } else if (item.type === 'pen' && item.points) {
+      // 筆刷若記錄了 time 也可以相容，純像素則略過
       item.points.forEach(p => {
         if (p.time) {
           if (!t1 || p.time < t1) t1 = p.time;
@@ -520,32 +519,25 @@ const startQuizMode = async () => {
   isLoading.value = true;
 
   try {
-    // 1. 為了避免新幣上市太晚導致歷史資料空白，將隨機幣種限定在歷史較久的幣別
     const symbols = ['BTCUSDT', 'ETHUSDT'];
     currentSymbol.value = symbols[Math.floor(Math.random() * symbols.length)];
 
-    // 2. 隨機挑選一個K線週期
     const intervals = ['15m', '1h', '4h'];
     currentInterval.value = intervals[Math.floor(Math.random() * intervals.length)];
 
-    // 3. 將隨機時間範圍設定在 2023 年之後到現在（確保所有幣種在該時段都有充足的歷史資料）
     const now = Date.now();
     const startYear2023 = new Date('2023-01-01').getTime();
     
-    // 隨機選一個時間點作為結束點 (至少距離現在有 30 天以上的緩衝)
     const maxRandomEnd = now - (30 * 24 * 60 * 60 * 1000);
     const randomEndTime = startYear2023 + Math.random() * (maxRandomEnd - startYear2023);
     
-    // 往前推算 1000 根K線的毫秒數作為起始時間
     const intervalMs = getIntervalMs(currentInterval.value);
     const randomStartTime = randomEndTime - (1000 * intervalMs);
 
-    // 4. 透過 Binance API 抓取歷史隨機數據
     let url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${Math.floor(randomStartTime)}&endTime=${Math.floor(randomEndTime)}&limit=1000`;
     
     const res = await axios.get(url);
     
-    // 防呆檢查：如果抓不到資料或資料太少，自動再執行一次重新抽盲盒
     if (!res.data || res.data.length < 200) {
       isLoading.value = false;
       return startQuizMode();
@@ -560,7 +552,6 @@ const startQuizMode = async () => {
       volume: parseFloat(item[5]),
     }));
 
-    // 5. 在這段歷史資料中，隨機決定要在哪一天停下來讓使用者測驗
     const minIdx = 100;
     const maxIdx = allData.value.length - 30;
     currentIndex.value = Math.floor(Math.random() * (maxIdx - minIdx + 1)) + minIdx;
@@ -640,6 +631,7 @@ const getTimeFromCoordinate = (x) => {
   return time;
 };
 
+// 修改後的滑鼠按下：針對 pen 改為純像素紀錄，不再吸附 K 棒
 const handleMouseDown = (e) => {
   if (!chartWrapper.value || !chart || !candleSeries) return;
   const rect = chartWrapper.value.getBoundingClientRect();
@@ -652,21 +644,49 @@ const handleMouseDown = (e) => {
   }
 
   isDragging = true;
-  const price = candleSeries.coordinateToPrice(y);
-  let time = getTimeFromCoordinate(x);
-
-  dragStart = { x, y, price, time };
 
   if (drawMode.value === 'pen') {
+    dragStart = { x, y };
     tempDrawing = {
       type: 'pen',
-      points: [{ x, y, time, price }]
+      points: [{ x, y }]
     };
+  } else {
+    const price = candleSeries.coordinateToPrice(y);
+    let time = getTimeFromCoordinate(x);
+    dragStart = { x, y, price, time };
+
+    if (drawMode.value === 'trend') {
+      if (price && time) {
+        tempDrawing = {
+          type: 'trend',
+          time1: time, price1: price,
+          time2: time, price2: price,
+        };
+      }
+    } else if (drawMode.value === 'fib') {
+      if (price && time) {
+        tempDrawing = {
+          type: 'fib',
+          price1: price, price2: price,
+          time1: time, time2: time
+        };
+      }
+    } else if (drawMode.value === 'rect') {
+      if (price && time) {
+        tempDrawing = {
+          type: 'rect',
+          time1: time, price1: price,
+          time2: time, price2: price
+        };
+      }
+    }
   }
 };
 
+// 修改後的滑鼠移動：針對 pen 動態加入純像素點
 const handleMouseMove = (e) => {
-  if (!isDragging || !dragStart || !chartWrapper.value || !chart || !candleSeries) return;
+  if (!isDragging || !chartWrapper.value || !chart || !candleSeries) return;
   
   if (rafId) return;
   rafId = requestAnimationFrame(() => {
@@ -675,6 +695,13 @@ const handleMouseMove = (e) => {
     const currentX = e.clientX - rect.left;
     const currentY = e.clientY - rect.top;
 
+    if (drawMode.value === 'pen' && tempDrawing) {
+      tempDrawing.points.push({ x: currentX, y: currentY });
+      redrawCanvas();
+      return;
+    }
+
+    if (!dragStart) return;
     const currentPriceVal = candleSeries.coordinateToPrice(currentY);
     let currentTime = getTimeFromCoordinate(currentX);
 
@@ -699,10 +726,6 @@ const handleMouseMove = (e) => {
     } else if (drawMode.value === 'vp') {
       if (currentTime) {
         tempDrawing = buildVPItem(dragStart.time, currentTime);
-      }
-    } else if (drawMode.value === 'pen') {
-      if (tempDrawing && tempDrawing.points) {
-        tempDrawing.points.push({ x: currentX, y: currentY, time: currentTime, price: currentPriceVal });
       }
     } else if (drawMode.value === 'rect') {
       if (currentPriceVal && currentTime) {
@@ -742,7 +765,6 @@ const handleMouseUp = () => {
   redrawCanvas();
 };
 
-// 讓 VP (平均成交量) 也完全使用絕對時間 (startTime / endTime) 進行跨週期對應
 const buildVPItem = (startTime, endTime) => {
   const visibleData = allData.value.slice(0, currentIndex.value);
   if (!visibleData.length) return null;
@@ -809,11 +831,7 @@ const checkSelection = (clickX, clickY) => {
         }
       }
     } else if (item.type === 'pen') {
-      const hit = item.points.some(p => {
-        const px = chart.timeScale().timeToCoordinate(p.time) ?? p.x;
-        const py = candleSeries.priceToCoordinate(p.price) ?? p.y;
-        return Math.hypot(clickX - px, clickY - py) < 10;
-      });
+      const hit = item.points.some(p => Math.hypot(clickX - p.x, clickY - p.y) < 10);
       if (hit) {
         foundId = item.id;
         break;
@@ -1004,8 +1022,9 @@ const renderItem = (ctx, item, isSelected = false, isTemp = false) => {
     if (!item.points || item.points.length === 0) return;
     ctx.beginPath();
     item.points.forEach((p, idx) => {
-      const px = chart.timeScale().timeToCoordinate(p.time) ?? p.x;
-      const py = candleSeries.priceToCoordinate(p.price) ?? p.y;
+      // 筆刷直接使用純像素坐標 p.x 與 p.y
+      const px = p.x;
+      const py = p.y;
       if (idx === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     });
