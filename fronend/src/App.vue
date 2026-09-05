@@ -697,8 +697,8 @@ const handleMouseDown = (e) => {
       if (price && time) {
         tempDrawing = {
           type: 'trend',
-          time1: time, price1: price,
-          time2: time, price2: price,
+          time1: time, price1: price, x1: x, y1: y,
+          time2: time, price2: price, x2: x, y2: y,
         };
       }
     } else if (drawMode.value === 'fib') {
@@ -745,8 +745,8 @@ const handleMouseMove = (e) => {
       if (currentPriceVal && currentTime) {
         tempDrawing = {
           type: 'trend',
-          time1: dragStart.time, price1: dragStart.price,
-          time2: currentTime, price2: currentPriceVal,
+          time1: dragStart.time, price1: dragStart.price, x1: dragStart.x, y1: dragStart.y,
+          time2: currentTime, price2: currentPriceVal, x2: currentX, y2: currentY,
         };
       }
     } else if (drawMode.value === 'fib') {
@@ -838,15 +838,18 @@ const checkSelection = (clickX, clickY) => {
   for (let i = drawings.value.length - 1; i >= 0; i--) {
     const item = drawings.value[i];
     if (item.type === 'trend') {
-      const x1 = chart.timeScale().timeToCoordinate(item.time1);
-      const y1 = candleSeries.priceToCoordinate(item.price1);
-      const x2 = chart.timeScale().timeToCoordinate(item.time2);
-      const y2 = candleSeries.priceToCoordinate(item.price2);
-      if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-        if (distToSegment({ x: clickX, y: clickY }, { x: x1, y: y1 }, { x: x2, y: y2 }) < 8) {
-          foundId = item.id;
-          break;
-        }
+      let x1 = chart.timeScale().timeToCoordinate(item.time1);
+      let y1 = candleSeries.priceToCoordinate(item.price1);
+      let x2 = chart.timeScale().timeToCoordinate(item.time2);
+      let y2 = candleSeries.priceToCoordinate(item.price2);
+      if (x1 === null) x1 = item.x1 ?? 0;
+      if (y1 === null) y1 = item.y1 ?? 0;
+      if (x2 === null) x2 = item.x2 ?? 0;
+      if (y2 === null) y2 = item.y2 ?? 0;
+
+      if (distToSegment({ x: clickX, y: clickY }, { x: x1, y: y1 }, { x: x2, y: y2 }) < 8) {
+        foundId = item.id;
+        break;
       }
     } else if (item.type === 'fib') {
       const y1 = candleSeries.priceToCoordinate(item.price1);
@@ -984,11 +987,15 @@ const redrawCanvas = () => {
 const renderItem = (ctx, item, isSelected = false, isTemp = false) => {
   if (!chart || !candleSeries) return;
   if (item.type === 'trend') {
-    const x1 = chart.timeScale().timeToCoordinate(item.time1);
-    const y1 = candleSeries.priceToCoordinate(item.price1);
-    const x2 = chart.timeScale().timeToCoordinate(item.time2);
-    const y2 = candleSeries.priceToCoordinate(item.price2);
-    if (x1 === null || y1 === null || x2 === null || y2 === null) return;
+    let x1 = chart.timeScale().timeToCoordinate(item.time1);
+    let y1 = candleSeries.priceToCoordinate(item.price1);
+    let x2 = chart.timeScale().timeToCoordinate(item.time2);
+    let y2 = candleSeries.priceToCoordinate(item.price2);
+
+    if (x1 === null) x1 = item.x1 ?? 0;
+    if (y1 === null) y1 = item.y1 ?? 0;
+    if (x2 === null) x2 = item.x2 ?? 0;
+    if (y2 === null) y2 = item.y2 ?? 0;
 
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -1153,7 +1160,7 @@ onUnmounted(() => {
   if (chart) {
     chart.remove();
     chart = null;
-  }
+    }
 });
 </script>
 
