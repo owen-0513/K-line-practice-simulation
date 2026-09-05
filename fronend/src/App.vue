@@ -328,6 +328,95 @@ const changeSymbol = async () => {
 const changeInterval = async () => {
   if (isPlaying.value) togglePlay();
 
+  const currentCandle = allData.value[currentIndex.value - 1];
+  let targetTime = currentCandle ? currentCandle.time : null;
+
+  let minTime = targetTime ? Math.floor(targetTime * 1000) : null;
+  let maxTime = minTime;
+
+  drawings.value.forEach(item => {
+    let t1 = null, t2 = null;
+    if (item.type === 'trend' || item.type === 'rect') {
+      t1 = item.time1;
+      t2 = item.time2;
+    } else if (item.type === 'fib') {
+      t1 = item.time1;
+      t2 = item.time2;
+    } else if (item.type === 'vp') {
+      t1 = item.startTime;
+      t2 = item.endTime;
+    } else if (item.type === 'pen' && item.points) {
+      item.points.forEach(p => {
+        if (p.time) {
+          if (!t1 || p.time < t1) t1 = p.time;
+          if (!t2 || p.time > t2) t2 = p.time;
+        }
+      });
+    }
+
+    if (t1) {
+      const ms1 = Math.floor(t1 * 1000);
+      if (!minTime || ms1 < minTime) minTime = ms1;
+      if (!maxTime || ms1 > maxTime) maxTime = ms1;
+    }
+    if (t2) {
+      const ms2 = Math.floor(t2 * 1000);
+      if (!minTime || ms2 < minTime) minTime = ms2;
+      if (!maxTime || ms2 > maxTime) maxTime = ms2;
+    }
+  });
+
+  try {
+    let url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&limit=1000`;
+
+    if (minTime && maxTime) {
+      const intervalMs = getIntervalMs(currentInterval.value);
+      const startTime = Math.max(0, minTime - (100 * intervalMs));
+      const endTime = maxTime + (100 * intervalMs);
+      url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
+    }
+
+    const res = await axios.get(url);
+    if (isUnmounted) return;
+    if (!res.data || res.data.length === 0) return;
+
+    const newData = res.data.map(item => ({
+      time: item[0] / 1000,
+      open: Number(item[1]),
+      high: Number(item[2]),
+      low: Number(item[3]),
+      close: Number(item[4]),
+      volume: Number(item[5]),
+    }));
+
+    allData.value = newData;
+
+    if (targetTime) {
+      let closestIndex = 0;
+      let minDiff = Infinity;
+      newData.forEach((item, index) => {
+        const diff = Math.abs(item.time - targetTime);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIndex = index;
+        }
+      });
+      currentIndex.value = Math.min(newData.length, closestIndex + 1);
+    } else {
+      currentIndex.value = newData.length;
+    }
+
+    renderChart();
+
+    if (chart && !minTime) {
+      chart.timeScale().fitContent();
+    }
+  } catch (error) {
+    console.error('切換週期失敗:', error);
+  }
+const changeInterval = async () => {
+  if (isPlaying.value) togglePlay();
+
   // 1. 取得目前畫面上的目標時間點（優先看當前 K 棒，其次看畫線定位）
   const currentCandle = allData.value[currentIndex.value - 1];
   let targetTime = currentCandle ? currentCandle.time : null;
