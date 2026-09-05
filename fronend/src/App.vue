@@ -347,7 +347,6 @@ const changeSymbol = async () => {
 const changeInterval = async () => {
   if (isPlaying.value) togglePlay();
 
-  // 1. 如果目前在「測驗模式」，保留當前測驗的時間邊界；否則取得目前畫面的目標時間點
   let targetTime = null;
   let quizStartTime = null;
   let quizEndTime = null;
@@ -365,7 +364,6 @@ const changeInterval = async () => {
   let minTime = targetTime ? Math.floor(targetTime * 1000) : null;
   let maxTime = minTime;
 
-  // 收集畫線的時間範圍（僅一般模式）
   if (!isQuizMode.value) {
     drawings.value.forEach(item => {
       let t1 = null, t2 = null;
@@ -405,14 +403,17 @@ const changeInterval = async () => {
     let url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&limit=1000`;
 
     if (isQuizMode.value && quizStartTime && quizEndTime) {
-      // 2. 測驗模式：維持原本測驗的區間去要新週期的 K 棒
       const startTime = Math.max(0, quizStartTime);
       const endTime = quizEndTime + (200 * intervalMs);
       url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
     } else if (maxTime) {
-      // 3. 一般模式：以結束點往前推 1000 根，確保有足夠的 K 棒數量
       const endTime = maxTime;
-      const startTime = Math.max(0, endTime - (1000 * intervalMs));
+      // 👉 修正重點：根據不同週期給予足夠的時間跨度（例如日線給 1000 天，小週期給對應的毫秒數）
+      const spanMs = currentInterval.value === '1d' 
+        ? 1000 * 24 * 60 * 60 * 1000  // 日線抓 1000 天
+        : 1000 * intervalMs;           // 其他小週期抓 1000 根
+
+      const startTime = Math.max(0, endTime - spanMs);
       url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
     }
 
@@ -1196,6 +1197,7 @@ onUnmounted(() => {
   }
 });
 </script>
+
 <style>
 html, body, #app {
   width: 100%; height: 100%; margin: 0; padding: 0;
