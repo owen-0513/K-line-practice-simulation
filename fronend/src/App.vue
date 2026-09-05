@@ -512,21 +512,63 @@ const closePosition = () => {
   redrawCanvas();
 };
 
-const startQuizMode = () => {
-  if (allData.value.length < 200) return;
+const startQuizMode = async () => {
   if (isPlaying.value) togglePlay();
   clearAllDrawings();
-  
   if (position.value) closePosition();
+  isLoading.value = true;
 
-  const minIdx = 100;
-  const maxIdx = allData.value.length - 50;
-  const randomIdx = Math.floor(Math.random() * (maxIdx - minIdx + 1)) + minIdx;
-  
-  currentIndex.value = randomIdx;
-  isQuizMode.value = true;
-  renderChart();
-  if (chart) chart.timeScale().fitContent();
+  try {
+    // 1. 隨機挑選一個交易對
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT'];
+    currentSymbol.value = symbols[Math.floor(Math.random() * symbols.length)];
+
+    // 2. 隨機挑選一個K線週期
+    const intervals = ['15m', '1h', '4h'];
+    currentInterval.value = intervals[Math.floor(Math.random() * intervals.length)];
+
+    // 3. 隨機挑選過去幾年中的某一個歷史時間點作為結束點 (例如從 2021 年到 2024 年之間)
+    const now = Date.now();
+    const threeYearsAgo = now - (3 * 365 * 24 * 60 * 60 * 1000);
+    const randomEndTime = threeYearsAgo + Math.random() * (now - threeYearsAgo - (30 * 24 * 60 * 60 * 1000));
+    
+    // 往前推算 1000 根K線的毫秒數作為起始時間
+    const intervalMs = getIntervalMs(currentInterval.value);
+    const randomStartTime = randomEndTime - (1000 * intervalMs);
+
+    // 4. 透過 Binance API 抓取該段歷史隨機數據
+    let url = `https://api.binance.com/api/v3/klines?symbol=${currentSymbol.value}&interval=${currentInterval.value}&startTime=${Math.floor(randomStartTime)}&endTime=${Math.floor(randomEndTime)}&limit=1000`;
+    
+    const res = await axios.get(url);
+    if (!res.data || res.data.length < 200) {
+      // 如果抓到的資料不夠，遞迴重新抽一次
+      isLoading.value = false;
+      return startQuizMode();
+    }
+
+    allData.value = res.data.map(item => ({
+      time: item[0] / 1000,
+      open: parseFloat(item[1]),
+      high: parseFloat(item[2]),
+      low: parseFloat(item[3]),
+      close: parseFloat(item[4]),
+      volume: parseFloat(item[5]),
+    }));
+
+    // 5. 在這段歷史資料中，隨機決定要在哪一天停下來讓使用者測驗（保留後面 50~100 根給使用者預測）
+    const minIdx = 100;
+    const maxIdx = allData.value.length - 30;
+    currentIndex.value = Math.floor(Math.random() * (maxIdx - minIdx + 1)) + minIdx;
+
+    isQuizMode.value = true;
+    renderChart();
+    if (chart) chart.timeScale().fitContent();
+
+  } catch (error) {
+    console.error('測驗模式載入歷史資料失敗:', error);
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 const setupCanvas = () => {
