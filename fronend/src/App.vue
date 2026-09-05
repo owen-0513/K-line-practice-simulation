@@ -472,7 +472,6 @@ const getIntervalMs = (interval) => {
   return map[interval] || 60 * 60 * 1000;
 };
 
-// 修正後的檢查機制：當 K 棒跑動碰到止盈或止損時，立即跳窗通知並結算
 const checkRiskTriggers = () => {
   if (!position.value) return;
   const currentCandle = allData.value[currentIndex.value - 1];
@@ -490,7 +489,7 @@ const checkRiskTriggers = () => {
       quizStats.value.losses++;
       isQuizMode.value = false;
     }
-    alert('💥 爆倉！已強制平倉。');
+    alert('💥 搞屁爆倉了！請注意倉位管理');
     position.value = null;
     if (isPlaying.value) togglePlay();
     return;
@@ -526,7 +525,7 @@ const checkRiskTriggers = () => {
 
     if (isQuizMode.value) {
       quizStats.value.total++;
-      if (triggeredType === 'TP') {
+      if (pnl > 0) {
         quizStats.value.wins++;
       } else {
         quizStats.value.losses++;
@@ -534,11 +533,8 @@ const checkRiskTriggers = () => {
       isQuizMode.value = false;
     }
 
-    const title = triggeredType === 'TP' ? '🎯 【恭喜】觸發止盈！' : '🛑 【注意】觸發停損！';
-    const profitText = pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2);
-    
-    alert(`${title}\n------------------\n成交價: ${triggerPrice}\n本單損益: ${profitText} USDT\n目前總資金: ${balance.value.toFixed(2)} USDT`);
-    
+    const msg = triggeredType === 'TP' ? '🎯 觸發止盈！' : '⚠️ 觸發止損！';
+    alert(`${msg} 已自動平倉，損益: ${pnl.toFixed(2)} USDT`);
     position.value = null;
     if (isPlaying.value) togglePlay();
   }
@@ -548,7 +544,7 @@ const openPosition = (type) => {
   if (position.value || currentIndex.value === 0) return;
 
   if (balance.value <= 0) {
-    alert('你沒錢了！請重新整理畫面');
+    alert('白癡你沒錢！請按F5重新整理畫面');
     return;
   }
   
@@ -584,6 +580,7 @@ const closePosition = () => {
 
   if (isQuizMode.value) {
     quizStats.value.total++;
+    // 【修正處】：嚴格以大於 0 算勝，小於等於 0 算敗，確保邏輯對稱且完全對應賺錢/賠錢
     if (pnl > 0) {
       quizStats.value.wins++;
     } else {
@@ -596,15 +593,10 @@ const closePosition = () => {
   redrawCanvas();
 };
 
-// 修正後的隨機出題：強制清空上一題殘留的持倉與止盈停損設定
 const startQuizMode = async () => {
   if (isPlaying.value) togglePlay();
   clearAllDrawings();
-  
-  position.value = null;
-  inputTakeProfit.value = null;
-  inputStopLoss.value = null;
-
+  if (position.value) closePosition();
   isLoading.value = true;
 
   try {
