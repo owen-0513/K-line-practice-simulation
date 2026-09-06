@@ -99,9 +99,9 @@
           />
         </div>
 
-        <!-- 停損價格輸入框 -->
+        <!-- 止損價格輸入框 -->
         <div class="input-group">
-          <label>停損價</label>
+          <label>止損價</label>
           <input 
             type="number" 
             v-model.number="inputStopLoss" 
@@ -186,7 +186,7 @@ const currentSymbol = ref('BTCUSDT');
 const currentInterval = ref('1h');
 const isLoading = ref(false);
 
-// 模擬下單狀態、保證金、槓桿、止盈與停損放在這裡（確保在 watch 之前定義）
+// 模擬下單狀態、保證金、槓桿、止盈與止損放在這裡（確保在 watch 之前定義）
 const balance = ref(10000);
 const inputMargin = ref(1000); 
 const inputTakeProfit = ref(null);
@@ -474,6 +474,7 @@ const getIntervalMs = (interval) => {
 
 const checkRiskTriggers = () => {
   if (!position.value) return;
+  if (currentIndex.value - 1 === position.value.entryIndex) return;
   const currentCandle = allData.value[currentIndex.value - 1];
   if (!currentCandle) return;
 
@@ -487,7 +488,7 @@ const checkRiskTriggers = () => {
     if (isQuizMode.value) {
       quizStats.value.total++;
       quizStats.value.losses++;
-      isQuizMode.value = false;
+      // isQuizMode.value = false;
     }
     alert('💥 搞屁爆倉了！請注意倉位管理');
     position.value = null;
@@ -530,7 +531,7 @@ const checkRiskTriggers = () => {
       } else {
         quizStats.value.losses++;
       }
-      isQuizMode.value = false;
+      // isQuizMode.value = false;
     }
 
     const msg = triggeredType === 'TP' ? '🎯 觸發止盈！' : '⚠️ 觸發止損！';
@@ -565,6 +566,7 @@ const openPosition = (type) => {
     type, 
     entryPrice: entry, 
     entryTime: currentCandle.time,
+    entryIndex: currentIndex.value - 1,
     margin: marginToUse,
     leverage: selectedLeverage.value,
     takeProfitPrice: inputTakeProfit.value ? Number(inputTakeProfit.value) : null,
@@ -639,7 +641,13 @@ const startQuizMode = async () => {
 
     isQuizMode.value = true;
     renderChart();
-    if (chart) chart.timeScale().fitContent();
+    
+    // 💡 移除原本的 fitContent()，改用設定局部可視範圍，讓畫面精準停在隨機切到的那根 K 棒附近，不亂跳
+    if (chart && allData.value.length > 0) {
+      const from = Math.max(0, currentIndex.value - 80);
+      const to = currentIndex.value + 10;
+      chart.timeScale().setVisibleLogicalRange({ from, to });
+    }
 
   } catch (error) {
     console.error('測驗模式載入歷史資料失敗:', error);
@@ -647,7 +655,6 @@ const startQuizMode = async () => {
     isLoading.value = false;
   }
 };
-
 const setupCanvas = () => {
   if (!overlayCanvas.value || !chartWrapper.value) return;
   const width = chartWrapper.value.clientWidth;
@@ -753,11 +760,11 @@ const handleMouseDown = (e) => {
         };
       }
     } else if (drawMode.value === 'rect') {
-      if (price && time) {
+      if (x && y) {
         tempDrawing = {
           type: 'rect',
-          time1: time, price1: price,
-          time2: time, price2: price
+          startX: x, startY: y,
+          endX: x, endY: y
         };
       }
     }
@@ -807,12 +814,9 @@ const handleMouseMove = (e) => {
         tempDrawing = buildVPItem(dragStart.time, currentTime);
       }
     } else if (drawMode.value === 'rect') {
-      if (currentPriceVal && currentTime) {
-        tempDrawing = {
-          type: 'rect',
-          time1: dragStart.time, price1: dragStart.price,
-          time2: currentTime, price2: currentPriceVal
-        };
+      if (tempDrawing) {
+        tempDrawing.endX = currentX;
+        tempDrawing.endY = currentY;
       }
     }
     redrawCanvas();
@@ -1019,7 +1023,7 @@ const redrawCanvas = () => {
 
       ctx.fillStyle = '#f23645';
       ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(`🛑 停損線 (SL: ${position.value.stopLossPrice})`, 10, slY - 6);
+      ctx.fillText(`🛑 止損線 (SL: ${position.value.stopLossPrice})`, 10, slY - 6);
     }
   }
 };
@@ -1029,13 +1033,46 @@ const renderItem = (ctx, item, isSelected = false, isTemp = false) => {
   if (item.type === 'trend') {
     const x1 = chart.timeScale().timeToCoordinate(item.time1);
     const y1 = candleSeries.priceToCoordinate(item.price1);
-    const x2 = chart.timeScale().timeToCoordinate(item.time2);
-    const y2 = candleSeries.priceToCoordinate(item.price2);
-    if (x1 === null || y1 === null || x2 === null || y2 === null) return;
+    let x2 = chart.timeScale().timeToCoordinate(item.time2);
+    let y2 = candleSeries.priceToCoordinate(item.price2);
+
+    if (x1 === null && x2 === null) return;
+
+    const canvasWidth = overlayCanvas.value.width;
+    const canvasHeight = overlayCanvas.value.height;
+
+    let startX = x1 !== null ? x1 : 0;
+    let startY = y1 !== null ? y1 : 0;
+    let endX = canvasWidth; // 預設向右延伸到畫布最右側
+    let endY = startY;
+
+    // 如果 x1 和 x2 都在畫布內（或其中一個有效）
+    if (x1 !== null && x2 !== null && y1 !== null && y2 !== null) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      if (dx !== 0) {
+        const slope = dy / dx;
+        const intercept = y1 - slope * x1;
+        // 讓線條強制延伸貫穿整個畫布右側
+        endY = slope * canvasWidth + intercept;
+      } else {
+        endX = x1;
+        endY = canvasHeight;
+      }
+    } else if (x1 !== null && y1 !== null && x2 === null) {
+      // 當點2超過畫布右側時間範圍（x2 為 null），嘗試用最後可用的可視時間或直接向右延伸
+      // 這裡可以透過記錄的 item.time2 與 item.time1 概算斜率，或是直接利用當前畫布寬度做延伸
+      endX = canvasWidth;
+      // 簡單起見，如果有兩個時間差但 x2 變 null，我們用畫面上有辦法的對應來延伸
+      endY = y1; // 預設水平或維持方向
+    } else if (x2 !== null && y2 !== null) {
+      endX = x2;
+      endY = y2;
+    }
 
     ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
     ctx.strokeStyle = isTemp ? '#f0b90b' : (isSelected ? '#ff9800' : '#2962ff');
     ctx.lineWidth = isSelected ? 4 : 2;
     ctx.stroke();
@@ -1109,17 +1146,12 @@ const renderItem = (ctx, item, isSelected = false, isTemp = false) => {
     ctx.strokeStyle = isTemp ? '#f0b90b' : (isSelected ? '#ff9800' : '#2962ff');
     ctx.lineWidth = isSelected ? 4 : 2;
     ctx.stroke();
-  } else if (item.type === 'rect') {
-    const x1 = chart.timeScale().timeToCoordinate(item.time1);
-    const x2 = chart.timeScale().timeToCoordinate(item.time2);
-    const y1 = candleSeries.priceToCoordinate(item.price1);
-    const y2 = candleSeries.priceToCoordinate(item.price2);
-    if (x1 === null || x2 === null || y1 === null || y2 === null) return;
 
-    const minX = Math.min(x1, x2);
-    const maxX = Math.max(x1, x2);
-    const minY = Math.min(y1, y2);
-    const maxY = Math.max(y1, y2);
+} else if (item.type === 'rect') {
+    const minX = Math.min(item.startX, item.endX);
+    const maxX = Math.max(item.startX, item.endX);
+    const minY = Math.min(item.startY, item.endY);
+    const maxY = Math.max(item.startY, item.endY);
     const width = maxX - minX;
     const height = maxY - minY;
 
